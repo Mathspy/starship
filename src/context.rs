@@ -16,7 +16,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::string::String;
 use std::time::{Duration, Instant};
-use terminal_size::terminal_size;
+use terminal_size::{terminal_size, terminal_size_using_fd};
 
 /// Context contains data or common methods that may be used by multiple modules.
 /// The data contained within Context will be relevant to this particular rendering
@@ -138,7 +138,35 @@ impl<'a> Context<'a> {
         let width = arguments
             .value_of("terminal_width")
             .and_then(|w| w.parse().ok())
-            .or_else(|| terminal_size().map(|(w, _)| w.0 as usize))
+            .or_else(|| {
+                #[cfg(unix)]
+                use std::os::unix::io::AsRawFd;
+
+                terminal_size()
+                    .or_else(|| {
+                        #[cfg(unix)]
+                        {
+                            terminal_size_using_fd(std::io::stderr().as_raw_fd())
+                        }
+
+                        #[cfg(not(unix))]
+                        {
+                            None
+                        }
+                    })
+                    .or_else(|| {
+                        #[cfg(unix)]
+                        {
+                            terminal_size_using_fd(std::io::stdin().as_raw_fd())
+                        }
+
+                        #[cfg(not(unix))]
+                        {
+                            None
+                        }
+                    })
+                    .map(|(w, _)| w.0 as usize)
+            })
             .unwrap_or(80);
 
         Context {
